@@ -131,7 +131,7 @@ def delete_todolist(todolist_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"detail": "Todo list deleted successfully"}
 
-@app.get("/todolists/{todolist_id}/todos/", response_model=list[TodoCreate])
+@app.get("/todolists/{todolist_id}/", response_model=list[TodoCreate])
 def read_todos(todolist_id: int, db: Session = Depends(get_db)):
     """Endpoint to get all todo items for a specific todo list."""
     db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
