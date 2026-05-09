@@ -1,0 +1,15 @@
+[tools]
+python = "3.14"
+sqlite = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+run = "pip install fastapi uvicorn sqlalchemy pytest httpx"
+
+[tasks.serve]
+run = "uvicorn main:app --reload"
+
+[tasks.test]
+run = "pytest"
