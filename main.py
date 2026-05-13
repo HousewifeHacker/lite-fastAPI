@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import create_engine, ForeignKey, String
+from sqlalchemy import create_engine, ForeignKey, String, select
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -99,7 +99,9 @@ def get_db():
 @app.get("/todolists/", response_model=list[TodoListCreate])
 def read_todolists(db: Session = Depends(get_db)):
     """Endpoint to get all todo lists."""
-    return db.query(TodoList).all()
+    return db.execute(
+        select(TodoList)
+    ).scalars().all()
 
 @app.post("/todolists/", response_model=TodoListCreate)
 def create_todolist(todolist: TodoListCreate, db: Session = Depends(get_db)):
@@ -113,7 +115,9 @@ def create_todolist(todolist: TodoListCreate, db: Session = Depends(get_db)):
 @app.put("/todolists/{todolist_id}/", response_model=TodoListCreate)
 def update_todolist(todolist_id: int, todolist: TodoListCreate, db: Session = Depends(get_db)):
     """Endpoint to update an existing todo list."""
-    db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
+    db_todolist = db.execute(
+        select(TodoList).where(TodoList.id == todolist_id)
+    ).scalars().first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
     db_todolist.name = todolist.name
@@ -124,7 +128,9 @@ def update_todolist(todolist_id: int, todolist: TodoListCreate, db: Session = De
 @app.delete("/todolists/{todolist_id}/")
 def delete_todolist(todolist_id: int, db: Session = Depends(get_db)):    
     """Endpoint to delete a todo list."""
-    db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
+    db_todolist = db.execute(
+        select(TodoList).where(TodoList.id == todolist_id)
+    ).scalars().first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
     db.delete(db_todolist)
@@ -134,16 +140,22 @@ def delete_todolist(todolist_id: int, db: Session = Depends(get_db)):
 @app.get("/todolists/{todolist_id}/", response_model=list[TodoCreate])
 def read_todos(todolist_id: int, db: Session = Depends(get_db)):
     """Endpoint to get all todo items for a specific todo list."""
-    db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
+    db_todolist = db.execute(
+        select(TodoList).where(TodoList.id == todolist_id)
+    ).scalars().first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
-    return db.query(Todo).filter(Todo.todolist_id == todolist_id).all()
+    return db.execute(
+        select(Todo).where(Todo.todolist_id == todolist_id)
+    ).scalars().all()
 
 @app.post("/todos/", response_model=TodoCreate)
 def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
     """Endpoint to create a new todo item."""
     # check if the specified todo list exists
-    db_todolist = db.query(TodoList).filter(TodoList.id == todo.todolist_id).first()
+    db_todolist = db.execute(
+        select(TodoList).where(TodoList.id == todo.todolist_id)
+    ).scalars().first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
     
@@ -160,12 +172,16 @@ def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
 @app.put("/todos/{todo_id}/", response_model=TodoCreate)
 def update_todo(todo_id: int, todo: TodoCreate, db: Session = Depends(get_db)):
     """Endpoint to update an existing todo item."""
-    db_todo = db.query(Todo).filter(Todo.id == todo_id).first()
+    db_todo = db.execute(
+        select(Todo).where(Todo.id == todo_id)
+    ).scalars().first()
     if not db_todo:
         raise HTTPException(status_code=404, detail="Todo item not found")
     
     # check if the specified todo list exists
-    db_todolist = db.query(TodoList).filter(TodoList.id == todo.todolist_id).first()
+    db_todolist = db.execute(
+        select(TodoList).where(TodoList.id == todo.todolist_id)
+    ).scalars().first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
 
@@ -179,7 +195,9 @@ def update_todo(todo_id: int, todo: TodoCreate, db: Session = Depends(get_db)):
 @app.delete("/todos/{todo_id}/")
 def delete_todo(todo_id: int, db: Session = Depends(get_db)):
     """Endpoint to delete a todo item."""
-    db_todo = db.query(Todo).filter(Todo.id == todo_id).first()
+    db_todo = db.execute(
+        select(Todo).where(Todo.id == todo_id)
+    ).scalars().first()
     if not db_todo:
         raise HTTPException(status_code=404, detail="Todo item not found")
     db.delete(db_todo)
