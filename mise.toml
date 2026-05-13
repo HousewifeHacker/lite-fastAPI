@@ -6,7 +6,16 @@ sqlite = "latest"
 _.python.venv = { path = ".venv", create = true }
 
 [tasks.install]
-run = "pip install fastapi uvicorn sqlalchemy pytest httpx"
+run = """
+pip install \
+fastapi \
+uvicorn \
+sqlalchemy \
+aiosqlite \
+pytest \
+pytest-asyncio \
+httpx
+"""
 
 [tasks.serve]
 run = "uvicorn main:app --reload"

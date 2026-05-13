@@ -1,27 +1,32 @@
+from typing import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import create_engine, ForeignKey, String
+from sqlalchemy import ForeignKey, String, select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
     mapped_column,
-    relationship,
-    Session,
-    sessionmaker,
+    relationship
 )
+
 
 
 # database setup
-DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(
+DATABASE_URL = "sqlite+aiosqlite::///./test.db"
+engine = create_async_engine(
     DATABASE_URL,
     echo=True,  # log SQL queries to the console for debugging
-    connect_args={"check_same_thread": False} # needed for SQLite to allow multiple threads to access the database. Not needed for other databases like PostgreSQL or MySQL.
 )
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+SessionLocal = async_sessionmaker(
+    engine,
+    expire_on_commit=False,  # prevent objects from being expired after commit
 )
 
 
@@ -61,12 +66,6 @@ class TodoList(Base):
     todos: Mapped[list[Todo]] = relationship("Todo", back_populates="todolist")
 
 
-# create tables in the database and start the FastAPI app
-Base.metadata.create_all(engine)
-
-app = FastAPI(title="Todo List API", description="A simple API for managing todo lists and items.")
-
-
 # pydantic models aka schemas
 class BaseSchema(BaseModel):
     """Base schema for Pydantic models"""
@@ -86,53 +85,67 @@ class TodoListCreate(BaseSchema):
 
 
 # dependency to get a database session for each request
-def get_db():
+async def get_db() -> AsyncGenerator[AsyncSession]:
     """Dependency that provides a database session for each request."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    async with SessionLocal() as db:
+        try:
+            yield db
+        finally:
+            await db.close()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan function to create database tables on startup."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    # No cleanup needed on shutdown
+
+app = FastAPI(
+    title="Todo List API",
+    description="A simple API for managing todo lists and items.",
+    lifespan=lifespan
+)
 
 
 # API endpoints
 @app.get("/todolists/", response_model=list[TodoListCreate])
-def read_todolists(db: Session = Depends(get_db)):
+async def read_todolists(db: AsyncSession = Depends(get_db)):
     """Endpoint to get all todo lists."""
     return db.query(TodoList).all()
 
 @app.post("/todolists/", response_model=TodoListCreate)
-def create_todolist(todolist: TodoListCreate, db: Session = Depends(get_db)):
+async def create_todolist(todolist: TodoListCreate, db: AsyncSession = Depends(get_db)):
     """Endpoint to create a new todo list."""
     db_todolist = TodoList(name=todolist.name)
     db.add(db_todolist)
-    db.commit()
-    db.refresh(db_todolist)
+    await db.commit()
+    await db.refresh(db_todolist)
     return db_todolist
 
 @app.put("/todolists/{todolist_id}/", response_model=TodoListCreate)
-def update_todolist(todolist_id: int, todolist: TodoListCreate, db: Session = Depends(get_db)):
+async def update_todolist(todolist_id: int, todolist: TodoListCreate, db: AsyncSession = Depends(get_db)):
     """Endpoint to update an existing todo list."""
     db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
     db_todolist.name = todolist.name
-    db.commit()
-    db.refresh(db_todolist)
+    await db.commit()
+    await db.refresh(db_todolist)
     return db_todolist
 
 @app.delete("/todolists/{todolist_id}/")
-def delete_todolist(todolist_id: int, db: Session = Depends(get_db)):    
+async def delete_todolist(todolist_id: int, db: AsyncSession = Depends(get_db)):
     """Endpoint to delete a todo list."""
     db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
     if not db_todolist:
         raise HTTPException(status_code=404, detail="Todo list not found")
     db.delete(db_todolist)
-    db.commit()
+    await db.commit()
     return {"detail": "Todo list deleted successfully"}
 
 @app.get("/todolists/{todolist_id}/", response_model=list[TodoCreate])
-def read_todos(todolist_id: int, db: Session = Depends(get_db)):
+async def read_todos(todolist_id: int, db: AsyncSession = Depends(get_db)):
     """Endpoint to get all todo items for a specific todo list."""
     db_todolist = db.query(TodoList).filter(TodoList.id == todolist_id).first()
     if not db_todolist:
@@ -140,7 +153,7 @@ def read_todos(todolist_id: int, db: Session = Depends(get_db)):
     return db.query(Todo).filter(Todo.todolist_id == todolist_id).all()
 
 @app.post("/todos/", response_model=TodoCreate)
-def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
+async def create_todo(todo: TodoCreate, db: AsyncSession = Depends(get_db)):
     """Endpoint to create a new todo item."""
     # check if the specified todo list exists
     db_todolist = db.query(TodoList).filter(TodoList.id == todo.todolist_id).first()
@@ -153,12 +166,12 @@ def create_todo(todo: TodoCreate, db: Session = Depends(get_db)):
         todolist_id=todo.todolist_id
     )
     db.add(db_todo)
-    db.commit()
-    db.refresh(db_todo)
+    await db.commit()
+    await db.refresh(db_todo)
     return db_todo  
 
 @app.put("/todos/{todo_id}/", response_model=TodoCreate)
-def update_todo(todo_id: int, todo: TodoCreate, db: Session = Depends(get_db)):
+async def update_todo(todo_id: int, todo: TodoCreate, db: AsyncSession = Depends(get_db)):
     """Endpoint to update an existing todo item."""
     db_todo = db.query(Todo).filter(Todo.id == todo_id).first()
     if not db_todo:
@@ -172,17 +185,17 @@ def update_todo(todo_id: int, todo: TodoCreate, db: Session = Depends(get_db)):
     db_todo.description = todo.description
     db_todo.completed = todo.completed
     db_todo.todolist_id = todo.todolist_id
-    db.commit()
-    db.refresh(db_todo)
+    await db.commit()
+    await db.refresh(db_todo)
     return db_todo
 
 @app.delete("/todos/{todo_id}/")
-def delete_todo(todo_id: int, db: Session = Depends(get_db)):
+async def delete_todo(todo_id: int, db: AsyncSession = Depends(get_db)):
     """Endpoint to delete a todo item."""
     db_todo = db.query(Todo).filter(Todo.id == todo_id).first()
     if not db_todo:
         raise HTTPException(status_code=404, detail="Todo item not found")
     db.delete(db_todo)
-    db.commit()
+    await db.commit()
     return {"detail": "Todo item deleted successfully"}
 
