@@ -1,11 +1,12 @@
-from fastapi.testclient import TestClient
+from collections.abc import Generator
 
-from main import app
+from app.main import app
 
-client = TestClient(app)
-
-
-def create_todo_response(description: str = "Learn FastAPI", todolist_id: int = 1):
+def create_todo_response(
+    description: str,
+    todolist_id: int,
+    client: Generator
+):
     response = client.post(
         "/todos",
         json={"description": description, "todolist_id": todolist_id},
@@ -14,7 +15,9 @@ def create_todo_response(description: str = "Learn FastAPI", todolist_id: int = 
     return response.json()
 
 
-def create_todolist_response(name: str = "My Todo List"):
+def create_todolist_response(
+    name: str, client: Generator
+):
     response = client.post(
         "/todolists",
         json={"name": name},
@@ -23,22 +26,22 @@ def create_todolist_response(name: str = "My Todo List"):
     return response.json()
 
 
-def test_create_todo():
+def test_create_todo(client: Generator):
     # requires a todo list, so we create it first
-    todolist_response = create_todolist_response(name="My Todo List")
+    todolist_response = create_todolist_response(name="My Todo List", client=client)
     todolist_id = todolist_response["id"]
     
     title = "Learn FastAPI"
-    data = create_todo_response(description=title, todolist_id=todolist_id)
+    data = create_todo_response(description=title, todolist_id=todolist_id, client=client)
 
     assert data["description"] == title
 
 
-def test_update_todo():
+def test_update_todo(client: Generator):
     # First, create a new todolist and a new todo item to update
-    todolist_response = create_todolist_response(name="My Todo List")
+    todolist_response = create_todolist_response(name="My Todo List", client=client)
     todolist_id = todolist_response["id"]
-    data = create_todo_response(description="Learn FastAPI", todolist_id=todolist_id)
+    data = create_todo_response(description="Learn FastAPI", todolist_id=todolist_id, client=client)
     todo_id = data["id"]
 
     # Now, update the created todo item
@@ -56,14 +59,14 @@ def test_update_todo():
     assert updated_data["completed"] is True
 
 
-def test_delete_todo():
+def test_delete_todo(client: Generator):
     # First, create a new todo item in a new todo list to delete
-    todolist_response = create_todolist_response(name="My Todo List")
+    todolist_response = create_todolist_response(name="My Todo List", client=client)
     todolist_id = todolist_response["id"]
     
     description = "Learn FastAPI"
 
-    data = create_todo_response(description=description, todolist_id=todolist_id)
+    data = create_todo_response(description=description, todolist_id=todolist_id, client=client)
     todo_id = data["id"]
 
     # Now, delete the created todo item
@@ -78,7 +81,7 @@ def test_delete_todo():
     assert all(todo["id"] != todo_id for todo in response.json())
 
 
-def test_update_nonexistent_todo():
+def test_update_nonexistent_todo(client: Generator):
     response = client.put(
         "/todos/9999",  # Assuming this ID does not exist
         json={
@@ -91,24 +94,24 @@ def test_update_nonexistent_todo():
     assert response.json() == {"detail": "Todo item not found"}
 
 
-def test_post_todolists():
+def test_post_todolists(client: Generator):    
     # Create a new todo list
     name = "My Todo List"
-    data = create_todolist_response(name=name)
+    data = create_todolist_response(name=name, client=client)
     assert data["name"] == name
 
 
-def test_get_todolists():
+def test_get_todolists(client: Generator):
     response = client.get("/todolists")
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
-def test_update_todolist():
+def test_update_todolist(client: Generator):
     # First, create a new todo list to update
     name = "My Todo List"
-    data = create_todolist_response(name=name)
+    data = create_todolist_response(name=name, client=client)
     todolist_id = data["id"]
 
     # Now, update the created todo list
@@ -122,10 +125,10 @@ def test_update_todolist():
     assert updated_data["name"] == new_name
 
 
-def test_delete_todolist():
+def test_delete_todolist(client: Generator):
     # First, create a new todo list to delete
     name = "My Todo List"
-    data = create_todolist_response(name=name)
+    data = create_todolist_response(name=name, client=client)
     todolist_id = data["id"]
 
     # Now, delete the created todo list
@@ -138,13 +141,13 @@ def test_delete_todolist():
     assert response.status_code == 404
 
 
-def test_get_nonexistent_todolist():
+def test_get_nonexistent_todolist(client: Generator):
     response = client.get("/todolists/9999")  # Assuming this ID does not exist
     assert response.status_code == 404
     assert response.json() == {"detail": "Todo list not found"}
 
 
-def test_update_nonexistent_todolist():
+def test_update_nonexistent_todolist(client: Generator):
     response = client.put(
         "/todolists/9999",  # Assuming this ID does not exist
         json={"name": "Nonexistent Todo List"},
@@ -153,10 +156,10 @@ def test_update_nonexistent_todolist():
     assert response.json() == {"detail": "Todo list not found"}
 
 
-def test_get_todos_for_todolist():
+def test_get_todos_for_todolist(client: Generator):
     # First, create a new todo list
     name = "My Todo List"
-    data = create_todolist_response(name=name)
+    data = create_todolist_response(name=name, client=client)
     todolist_id = data["id"]
 
     # Now, get the todos for the created todo list (should be empty)
@@ -168,7 +171,7 @@ def test_get_todos_for_todolist():
     # add a new todo item to the created todo list
     description = "Learn FastAPI"
     completed = False
-    data = create_todo_response(description=description, todolist_id=todolist_id)
+    data = create_todo_response(description=description, todolist_id=todolist_id, client=client)
     todo_id = data["id"]
 
     # Now, get the todos for the created todo list (should contain the new todo)
