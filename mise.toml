@@ -9,7 +9,7 @@ _.python.venv = { path = ".venv", create = true }
 run = "pip install fastapi uvicorn sqlalchemy pytest httpx"
 
 [tasks.serve]
-run = "uvicorn main:app --reload"
+run = "APP_ENV=dev uvicorn main:app --reload"
 
 [tasks.test]
-run = "pytest"
+run = "APP_ENV=test pytest"

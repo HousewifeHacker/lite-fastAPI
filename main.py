@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import create_engine, ForeignKey, String, select
@@ -12,7 +14,12 @@ from sqlalchemy.orm import (
 
 
 # database setup
-DATABASE_URL = "sqlite:///./test.db"
+DATABASE_URLS = {
+    "dev": "sqlite:///./dev.db",
+    "test": "sqlite:///./test.db"
+}
+APP_ENV = os.getenv("APP_ENV", "dev")
+DATABASE_URL = DATABASE_URLS[APP_ENV]
 engine = create_engine(
     DATABASE_URL,
     echo=True,  # log SQL queries to the console for debugging
