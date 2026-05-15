@@ -12,4 +12,8 @@ run = "pip install fastapi uvicorn sqlalchemy pytest httpx"
 run = "APP_ENV=dev uvicorn main:app --reload"
 
 [tasks.test]
-run = "APP_ENV=test pytest"
+run = """
+rm -f test.db
+APP_ENV=test pytest
+rm -f test.db
+"""
